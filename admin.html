@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản lý sự kiện</title>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Config Supabase -->
+  <script src="config.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f4f5f7;
+      color: #111827;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    h1 {
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      margin-top: 0;
+      margin-bottom: 25px;
+    }
+
+    .toolbar {
+      background: white;
+      padding: 20px;
+      border-radius: 14px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.05);
+
+      display: grid;
+      grid-template-columns: 2fr 2fr auto;
+      gap: 12px;
+    }
+
+    select,
+    input,
+    button {
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+    }
+
+    button {
+      background: #111;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4,1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: white;
+      padding: 22px;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.05);
+    }
+
+    .card-title {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: 30px;
+      font-weight: bold;
+    }
+
+    .green {
+      color: #16a34a;
+    }
+
+    .orange {
+      color: #ea580c;
+    }
+
+    .blue {
+      color: #2563eb;
+    }
+
+    .table-box {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.05);
+      overflow-x: auto;
+    }
+
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 850px;
+    }
+
+    th {
+      text-align: left;
+      padding: 13px;
+      background: #f9fafb;
+      font-size: 13px;
+    }
+
+    td {
+      padding: 13px;
+      border-top: 1px solid #eee;
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .checked {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .notchecked {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 30px;
+      color: #777;
+    }
+
+    #loading {
+      text-align: center;
+      padding: 20px;
+      display: none;
+    }
+
+    @media(max-width: 800px) {
+
+      .stats {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+    }
+
+    @media(max-width: 500px) {
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .container {
+        padding: 0 10px;
+      }
+
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>🎟️ Quản lý sự kiện</h1>
+
+  <p class="subtitle">
+    Theo dõi đăng ký và check-in theo thời gian thực
+  </p>
+
+
+  <!-- FILTER -->
+
+  <div class="toolbar">
+
+    <select id="eventSelect">
+      <option value="">
+        -- Chọn sự kiện --
+      </option>
+    </select>
+
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="🔎 Tìm tên, email, số điện thoại..."
+    >
+
+    <button id="refreshBtn">
+      🔄 Làm mới
+    </button>
+
+  </div>
+
+
+  <!-- THỐNG KÊ -->
+
+  <div class="stats">
+
+    <div class="card">
+      <div class="card-title">
+        TỔNG ĐĂNG KÝ
+      </div>
+
+      <div
+        class="card-value blue"
+        id="totalCount"
+      >
+        0
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-title">
+        ĐÃ CHECK-IN
+      </div>
+
+      <div
+        class="card-value green"
+        id="checkedCount"
+      >
+        0
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-title">
+        CHƯA CHECK-IN
+      </div>
+
+      <div
+        class="card-value orange"
+        id="notCheckedCount"
+      >
+        0
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-title">
+        TỶ LỆ THAM DỰ
+      </div>
+
+      <div
+        class="card-value"
+        id="rateCount"
+      >
+        0%
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- TABLE -->
+
+  <div class="table-box">
+
+    <div class="table-header">
+
+      <h2>
+        Danh sách người tham dự
+      </h2>
+
+      <span id="lastUpdated"></span>
+
+    </div>
+
+
+    <div id="loading">
+      Đang tải dữ liệu...
+    </div>
+
+
+    <table>
+
+      <thead>
+
+        <tr>
+
+          <th>#</th>
+
+          <th>Họ tên</th>
+
+          <th>Email</th>
+
+          <th>Số điện thoại</th>
+
+          <th>Đơn vị</th>
+
+          <th>Trạng thái</th>
+
+          <th>Giờ check-in</th>
+
+        </tr>
+
+      </thead>
+
+
+      <tbody id="tableBody">
+
+        <tr>
+          <td
+            colspan="7"
+            class="empty"
+          >
+            Hãy chọn sự kiện để xem dữ liệu.
+          </td>
+        </tr>
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+
+<script>
+
+const db = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+
+const eventSelect =
+  document.getElementById("eventSelect");
+
+const searchInput =
+  document.getElementById("searchInput");
+
+const tableBody =
+  document.getElementById("tableBody");
+
+const totalCount =
+  document.getElementById("totalCount");
+
+const checkedCount =
+  document.getElementById("checkedCount");
+
+const notCheckedCount =
+  document.getElementById("notCheckedCount");
+
+const rateCount =
+  document.getElementById("rateCount");
+
+const loading =
+  document.getElementById("loading");
+
+const lastUpdated =
+  document.getElementById("lastUpdated");
+
+
+let registrations = [];
+
+
+/* ==============================
+   LOAD EVENTS
+============================== */
+
+async function loadEvents() {
+
+  const { data, error } = await db
+    .from("events")
+    .select("*")
+    .order("event_date");
+
+
+  if (error) {
+
+    alert(
+      "Không tải được sự kiện: " +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  data.forEach(event => {
+
+    const option =
+      document.createElement("option");
+
+
+    option.value =
+      event.id;
+
+
+    option.textContent =
+      event.name +
+      " - " +
+      new Date(
+        event.event_date
+      ).toLocaleString("vi-VN");
+
+
+    eventSelect.appendChild(
+      option
+    );
+
+  });
+
+}
+
+
+/* ==============================
+   LOAD REGISTRATIONS
+============================== */
+
+async function loadRegistrations() {
+
+  const eventId =
+    eventSelect.value;
+
+
+  if (!eventId) {
+
+    registrations = [];
+
+    renderTable([]);
+
+    updateStats([]);
+
+    return;
+
+  }
+
+
+  loading.style.display =
+    "block";
+
+
+  const { data, error } = await db
+
+    .from("registrations")
+
+    .select("*")
+
+    .eq(
+      "event_id",
+      eventId
+    );
+
+
+  loading.style.display =
+    "none";
+
+
+  if (error) {
+
+    alert(
+      "Không tải được danh sách: " +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  registrations =
+    data || [];
+
+
+  updateStats(
+    registrations
+  );
+
+
+  filterData();
+
+
+  lastUpdated.innerText =
+    "Cập nhật: " +
+    new Date()
+      .toLocaleTimeString("vi-VN");
+
+}
+
+
+/* ==============================
+   STATISTICS
+============================== */
+
+function updateStats(data) {
+
+  const total =
+    data.length;
+
+
+  const checked =
+    data.filter(
+      item =>
+        item.checked_in_at
+    ).length;
+
+
+  const notChecked =
+    total - checked;
+
+
+  const rate =
+    total === 0
+      ? 0
+      : Math.round(
+          checked /
+          total *
+          100
+        );
+
+
+  totalCount.innerText =
+    total;
+
+
+  checkedCount.innerText =
+    checked;
+
+
+  notCheckedCount.innerText =
+    notChecked;
+
+
+  rateCount.innerText =
+    rate + "%";
+
+}
+
+
+/* ==============================
+   SEARCH
+============================== */
+
+function filterData() {
+
+  const keyword =
+    searchInput.value
+      .toLowerCase()
+      .trim();
+
+
+  if (!keyword) {
+
+    renderTable(
+      registrations
+    );
+
+    return;
+
+  }
+
+
+  const filtered =
+    registrations.filter(item => {
+
+      const text = [
+
+        item.full_name,
+
+        item.email,
+
+        item.phone,
+
+        item.organization
+
+      ]
+
+      .filter(Boolean)
+
+      .join(" ")
+
+      .toLowerCase();
+
+
+      return text.includes(
+        keyword
+      );
+
+    });
+
+
+  renderTable(
+    filtered
+  );
+
+}
+
+
+/* ==============================
+   ESCAPE HTML
+============================== */
+
+function escapeHtml(value) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+
+  return String(value)
+
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
+
+}
+
+
+/* ==============================
+   TABLE
+============================== */
+
+function renderTable(data) {
+
+  if (
+    !eventSelect.value
+  ) {
+
+    tableBody.innerHTML = `
+
+      <tr>
+
+        <td
+          colspan="7"
+          class="empty"
+        >
+          Hãy chọn sự kiện để xem dữ liệu.
+        </td>
+
+      </tr>
+
+    `;
+
+    return;
+
+  }
+
+
+  if (
+    data.length === 0
+  ) {
+
+    tableBody.innerHTML = `
+
+      <tr>
+
+        <td
+          colspan="7"
+          class="empty"
+        >
+          Không có dữ liệu.
+        </td>
+
+      </tr>
+
+    `;
+
+    return;
+
+  }
+
+
+  tableBody.innerHTML =
+    data.map(
+      (item,index) => {
+
+
+        let status;
+
+
+        let checkinTime =
+          "-";
+
+
+        if (
+          item.checked_in_at
+        ) {
+
+          status = `
+
+            <span
+              class="badge checked"
+            >
+              ✓ Đã check-in
+            </span>
+
+          `;
+
+
+          checkinTime =
+            new Date(
+              item.checked_in_at
+            )
+            .toLocaleString(
+              "vi-VN"
+            );
+
+        }
+
+        else {
+
+          status = `
+
+            <span
+              class="badge notchecked"
+            >
+              Chưa check-in
+            </span>
+
+          `;
+
+        }
+
+
+        return `
+
+          <tr>
+
+            <td>
+              ${index + 1}
+            </td>
+
+            <td>
+              <strong>
+                ${escapeHtml(item.full_name)}
+              </strong>
+            </td>
+
+            <td>
+              ${escapeHtml(item.email)}
+            </td>
+
+            <td>
+              ${escapeHtml(item.phone)}
+            </td>
+
+            <td>
+              ${escapeHtml(item.organization)}
+            </td>
+
+            <td>
+              ${status}
+            </td>
+
+            <td>
+              ${checkinTime}
+            </td>
+
+          </tr>
+
+        `;
+
+      }
+
+    )
+    .join("");
+
+}
+
+
+/* ==============================
+   EVENTS
+============================== */
+
+eventSelect.addEventListener(
+  "change",
+  loadRegistrations
+);
+
+
+searchInput.addEventListener(
+  "input",
+  filterData
+);
+
+
+document
+.getElementById(
+  "refreshBtn"
+)
+.addEventListener(
+  "click",
+  loadRegistrations
+);
+
+
+/* ==============================
+   START
+============================== */
+
+loadEvents();
+
+</script>
+
+</body>
+</html>

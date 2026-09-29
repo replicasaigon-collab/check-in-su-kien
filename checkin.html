@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check-in sự kiện</title>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Thư viện quét QR -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <!-- Config Supabase -->
+  <script src="config.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f5f7;
+      margin: 0;
+      padding: 30px 15px;
+    }
+
+    .container {
+      max-width: 520px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    select, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #111;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    #reader {
+      width: 100%;
+      margin-top: 15px;
+    }
+
+    #result {
+      display: none;
+      padding: 20px;
+      margin-top: 20px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .success {
+      display: block !important;
+      background: #dcfce7;
+      color: #166534;
+      border: 2px solid #22c55e;
+    }
+
+    .warning {
+      display: block !important;
+      background: #fef3c7;
+      color: #92400e;
+      border: 2px solid #f59e0b;
+    }
+
+    .error {
+      display: block !important;
+      background: #fee2e2;
+      color: #991b1b;
+      border: 2px solid #ef4444;
+    }
+
+    #counter {
+      text-align: center;
+      margin: 15px 0;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>📷 Check-in sự kiện</h1>
+
+  <label>Chọn sự kiện</label>
+  <select id="eventSelect">
+    <option value="">-- Chọn sự kiện --</option>
+  </select>
+
+ <button id="startBtn">
+    Bật camera quét QR
+</button>
+
+<div style="margin-top: 15px;">
+    <input
+        id="manualTicketCode"
+        type="text"
+        placeholder="Nhập mã vé trực tiếp..."
+        style="
+            width: 100%;
+            padding: 12px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        "
+    >
+
+    <button
+        type="button"
+        onclick="manualCheckin()"
+        style="margin-top: 8px;"
+    >
+        Check-in bằng mã vé
+    </button>
+</div>
+
+<div id="counter">
+    Đã có mặt: 0 / 0
+</div>
+  </div>
+
+  <div id="reader"></div>
+
+  <div id="result"></div>
+
+</div>
+
+<script>
+
+const db = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+const eventSelect = document.getElementById("eventSelect");
+const result = document.getElementById("result");
+const counter = document.getElementById("counter");
+
+let scanner = null;
+let scanning = false;
+
+
+/* =========================
+   LOAD SỰ KIỆN
+========================= */
+
+async function loadEvents() {
+
+  const { data, error } = await db
+    .from("events")
+    .select("*")
+    .eq("is_open", true)
+    .order("event_date");
+
+  if (error) {
+    alert("Không tải được sự kiện: " + error.message);
+    return;
+  }
+
+  data.forEach(event => {
+
+    const option = document.createElement("option");
+
+    option.value = event.id;
+    option.textContent =
+      event.name + " - " +
+      new Date(event.event_date).toLocaleString("vi-VN");
+
+    eventSelect.appendChild(option);
+
+  });
+
+}
+
+
+/* =========================
+   ĐẾM CHECK-IN
+========================= */
+
+async function updateCounter() {
+
+  const eventId = eventSelect.value;
+
+  if (!eventId) {
+    counter.innerText = "Đã có mặt: 0 / 0";
+    return;
+  }
+
+  const { data, error } = await db
+    .from("registrations")
+    .select("checked_in_at")
+    .eq("event_id", eventId);
+
+  if (error) {
+  console.error("Lỗi đọc registrations:", error);
+  alert("Lỗi Supabase: " + error.message);
+  return;
+}
+
+  const total = data.length;
+
+  const checked = data.filter(
+    x => x.checked_in_at !== null
+  ).length;
+
+  counter.innerText =
+    `Đã có mặt: ${checked} / ${total}`;
+
+}
+
+
+/* =========================
+   HIỂN THỊ KẾT QUẢ
+========================= */
+
+function showResult(type, html) {
+
+  result.className = type;
+  result.innerHTML = html;
+
+}
+
+
+/* =========================
+   XỬ LÝ QR
+========================= */
+async function manualCheckin() {
+    const input = document.getElementById("manualTicketCode");
+    const ticketCode = input.value.trim();
+
+    if (!ticketCode) {
+        showResult(
+            "error",
+            "❌ Vui lòng nhập mã vé"
+        );
+        return;
+    }
+
+    await processTicket(ticketCode);
+}
+
+async function processTicket(ticketCode) {
+
+  const eventId = eventSelect.value;
+
+  if (!eventId) {
+
+    showResult(
+      "error",
+      "❌ Vui lòng chọn sự kiện"
+    );
+
+    return;
+  }
+
+
+  const { data, error } = await db
+    .from("registrations")
+    .select("*")
+    .eq("ticket_code", ticketCode)
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+
+  if (error || !data) {
+
+    showResult(
+      "error",
+      "❌ VÉ KHÔNG HỢP LỆ<br>Không tìm thấy vé trong sự kiện này."
+    );
+
+    return;
+  }
+
+
+  /* ĐÃ CHECK-IN */
+
+  if (data.checked_in_at) {
+
+    const time =
+      new Date(data.checked_in_at)
+      .toLocaleTimeString("vi-VN");
+
+    showResult(
+      "warning",
+      `⚠️ ĐÃ CHECK-IN<br><br>
+       ${data.full_name}<br>
+       Check-in lúc: ${time}`
+    );
+
+    return;
+  }
+
+
+  /* CHECK-IN */
+
+  const now = new Date().toISOString();
+
+  const { error: updateError } = await db
+    .from("registrations")
+    .update({
+      checked_in_at: now
+    })
+    .eq("id", data.id);
+
+
+  if (updateError) {
+
+    showResult(
+      "error",
+      "❌ Không thể cập nhật check-in:<br>" +
+      updateError.message
+    );
+
+    return;
+  }
+
+
+  showResult(
+    "success",
+    `✅ CHECK-IN THÀNH CÔNG<br><br>
+     ${data.full_name}<br>
+     ${data.organization || ""}`
+  );
+
+
+  await updateCounter();
+
+}
+
+
+/* =========================
+   CAMERA
+========================= */
+
+document
+.getElementById("startBtn")
+.addEventListener("click", async () => {
+
+  if (!eventSelect.value) {
+
+    alert("Hãy chọn sự kiện trước.");
+    return;
+
+  }
+
+
+  if (scanning) return;
+
+  scanner = new Html5Qrcode("reader");
+
+
+  try {
+
+    await scanner.start(
+
+      { facingMode: "environment" },
+
+      {
+        fps: 10,
+        qrbox: {
+          width: 250,
+          height: 250
+        }
+      },
+
+      async (decodedText) => {
+
+        if (!scanning) return;
+
+        scanning = false;
+
+        await processTicket(decodedText);
+
+
+        /* nghỉ 2 giây tránh quét lặp */
+
+        setTimeout(() => {
+          scanning = true;
+        }, 2000);
+
+      }
+
+    );
+
+    scanning = true;
+
+  }
+
+  catch (err) {
+
+    showResult(
+      "error",
+      "❌ Không mở được camera.<br>" +
+      err
+    );
+
+  }
+
+});
+
+
+eventSelect.addEventListener(
+  "change",
+  updateCounter
+);
+
+
+/* =========================
+   KHỞI ĐỘNG
+========================= */
+
+loadEvents();
+
+</script>
+
+</body>
+</html>
