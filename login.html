@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Đăng nhập quản trị</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 420px;
+            background: white;
+            padding: 35px;
+            border-radius: 18px;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 15px;
+            margin-bottom: 7px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 25px;
+            border: none;
+            border-radius: 8px;
+            background: #111;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #333;
+        }
+
+        #message {
+            margin-top: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #dc2626;
+        }
+
+        .success {
+            color: #16a34a;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="login-box">
+
+    <h1>🔐 Đăng nhập Admin</h1>
+
+    <div class="subtitle">
+        Hệ thống quản lý sự kiện
+    </div>
+
+    <label>Email</label>
+
+    <input
+        type="email"
+        id="email"
+        placeholder="Nhập email admin"
+    >
+
+    <label>Mật khẩu</label>
+
+    <input
+        type="password"
+        id="password"
+        placeholder="Nhập mật khẩu"
+    >
+
+    <button onclick="login()">
+        Đăng nhập
+    </button>
+
+    <div id="message"></div>
+
+</div>
+
+<script>
+
+const db = supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+);
+
+async function login() {
+
+    const email =
+        document.getElementById("email").value.trim();
+
+    const password =
+        document.getElementById("password").value;
+
+    const message =
+        document.getElementById("message");
+
+    if (!email || !password) {
+
+        message.className = "error";
+        message.innerText =
+            "❌ Vui lòng nhập email và mật khẩu";
+
+        return;
+    }
+
+    message.className = "";
+    message.innerText = "Đang đăng nhập...";
+
+    const { data, error } =
+        await db.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+
+    if (error) {
+
+        console.error(error);
+
+        message.className = "error";
+        message.innerText =
+            "❌ Email hoặc mật khẩu không đúng";
+
+        return;
+    }
+
+    message.className = "success";
+    message.innerText =
+        "✅ Đăng nhập thành công";
+
+    setTimeout(() => {
+        window.location.href = "admin.html";
+    }, 500);
+}
+
+
+// Nếu đã đăng nhập thì vào thẳng Admin
+async function checkSession() {
+
+    const { data } =
+        await db.auth.getSession();
+
+    if (data.session) {
+        window.location.href = "admin.html";
+    }
+}
+
+checkSession();
+
+</script>
+
+</body>
+</html>
